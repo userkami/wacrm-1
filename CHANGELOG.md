@@ -9,6 +9,21 @@ Versions follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Pre-1.0, `MINOR` bumps cover new modules; `PATCH` bumps cover bug fixes
 and polish.
 
+## [Unreleased]
+
+### Added
+
+- **OpenRouter provider for the AI agent.** Bring-your-own-key setups can
+  now pick **OpenRouter** alongside OpenAI and Anthropic. OpenRouter is an
+  OpenAI-compatible aggregator, so any slug works as the model (e.g.
+  `openai/gpt-4o-mini`, `anthropic/claude-haiku-4.5`, or a `:free` tier) —
+  add a key at openrouter.ai/keys. The model field stays free text; the
+  new default is `openai/gpt-4o-mini`.
+
+> **Migration required:** apply `supabase/migrations/037_ai_openrouter.sql`
+> (widens the `provider` CHECK on `ai_configs` and `ai_usage_log` to
+> accept `'openrouter'`).
+
 ## [0.8.1] — 2026-07-10
 
 Fixes inbound chats fragmenting into multiple threads for the same

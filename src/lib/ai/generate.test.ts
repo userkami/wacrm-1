@@ -70,6 +70,61 @@ describe('parseGeneration', () => {
   })
 })
 
+describe('generateReply — OpenRouter', () => {
+  it('calls the OpenAI-compatible endpoint with Bearer auth and parses usage', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      okResponse({
+        choices: [{ message: { content: 'Hi from OpenRouter!' } }],
+        usage: { prompt_tokens: 12, completion_tokens: 5, total_tokens: 17 },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await generateReply({
+      config: config({ provider: 'openrouter', apiKey: 'sk-or-x' }),
+      systemPrompt: 'sys',
+      messages: [{ role: 'user', content: 'Hello' }],
+    })
+
+    expect(res).toEqual({
+      text: 'Hi from OpenRouter!',
+      handoff: false,
+      usage: { promptTokens: 12, completionTokens: 5, totalTokens: 17 },
+    })
+    const [url, opts] = fetchMock.mock.calls[0]
+    expect(url).toContain('openrouter.ai')
+    expect(opts.headers.Authorization).toBe('Bearer sk-or-x')
+  })
+
+  it('sends the OpenRouter app-identification headers when configured', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      okResponse({ choices: [{ message: { content: 'ok' } }] }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const prevRef = process.env.OPENROUTER_REFERER
+    const prevTitle = process.env.OPENROUTER_APP_TITLE
+    process.env.OPENROUTER_REFERER = 'https://example.com'
+    process.env.OPENROUTER_APP_TITLE = 'Acme CRM'
+    try {
+      await generateReply({
+        config: config({ provider: 'openrouter' }),
+        systemPrompt: 'sys',
+        messages: [{ role: 'user', content: 'Hi' }],
+      })
+      const [url, opts] = fetchMock.mock.calls[0]
+      expect(url).toContain('openrouter.ai')
+      expect(opts.headers['HTTP-Referer']).toBe('https://example.com')
+      expect(opts.headers['X-Title']).toBe('Acme CRM')
+    } finally {
+      // Restore in case the test runner shares the process.env.
+      if (prevRef === undefined) delete process.env.OPENROUTER_REFERER
+      else process.env.OPENROUTER_REFERER = prevRef
+      if (prevTitle === undefined) delete process.env.OPENROUTER_APP_TITLE
+      else process.env.OPENROUTER_APP_TITLE = prevTitle
+    }
+  })
+})
+
 describe('generateReply — OpenAI', () => {
   it('calls the chat completions endpoint and returns the reply', async () => {
     const fetchMock = vi.fn().mockResolvedValue(

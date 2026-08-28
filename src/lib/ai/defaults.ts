@@ -13,6 +13,10 @@ import type { AiProvider } from './types'
 export const AI_PROVIDER_DEFAULT_MODEL: Record<AiProvider, string> = {
   openai: 'gpt-5.4-mini',
   anthropic: 'claude-haiku-4-5-20251001',
+  // Any OpenRouter slug works — this is only the starting point. Common
+  // ones: `openai/gpt-4o-mini`, `anthropic/claude-haiku-4.5`, or any
+  // `<provider>/<model>:free` tier. The model field stays free text.
+  openrouter: 'openai/gpt-4o-mini',
 }
 
 /**
