@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { decrypt } from '@/lib/whatsapp/encryption'
-import type { AiConfig } from './types'
+import type { AiConfig, SttProvider, TtsProvider } from './types'
 
 interface AiConfigRow {
   provider: 'openai' | 'anthropic' | 'openrouter'
@@ -12,10 +12,15 @@ interface AiConfigRow {
   auto_reply_max_per_conversation: number
   handoff_agent_id: string | null
   embeddings_api_key: string | null
+  stt_provider: SttProvider | null
+  stt_api_key: string | null
+  tts_provider: TtsProvider | null
+  tts_api_key: string | null
+  tts_voice: string | null
 }
 
 const CONFIG_COLUMNS =
-  'provider, model, api_key, system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, handoff_agent_id, embeddings_api_key'
+  'provider, model, api_key, system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, handoff_agent_id, embeddings_api_key, stt_provider, stt_api_key, tts_provider, tts_api_key, tts_voice'
 
 /**
  * Load and decrypt the account's AI config for *use* (draft or
@@ -69,6 +74,32 @@ export async function loadAiConfig(
     }
   }
 
+  // Voice keys are likewise optional. A corrupt voice key must not take
+  // down the (more important) text draft/auto-reply, so a decrypt failure
+  // here downgrades to "no voice" rather than throwing.
+  let sttApiKey: string | null = null
+  if (row.stt_api_key) {
+    try {
+      sttApiKey = decrypt(row.stt_api_key)
+    } catch {
+      console.error(
+        `[ai config] STT key for account ${accountId} could not be decrypted — voice transcription disabled until it is re-entered.`,
+      )
+      sttApiKey = null
+    }
+  }
+  let ttsApiKey: string | null = null
+  if (row.tts_api_key) {
+    try {
+      ttsApiKey = decrypt(row.tts_api_key)
+    } catch {
+      console.error(
+        `[ai config] TTS key for account ${accountId} could not be decrypted — voice replies disabled until it is re-entered.`,
+      )
+      ttsApiKey = null
+    }
+  }
+
   return {
     provider: row.provider,
     model: row.model,
@@ -79,6 +110,11 @@ export async function loadAiConfig(
     autoReplyMaxPerConversation: row.auto_reply_max_per_conversation,
     handoffAgentId: row.handoff_agent_id,
     embeddingsApiKey,
+    sttProvider: row.stt_provider,
+    sttApiKey,
+    ttsProvider: row.tts_provider,
+    ttsApiKey,
+    ttsVoice: row.tts_voice,
   }
 }
 

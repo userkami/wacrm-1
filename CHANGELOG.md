@@ -24,6 +24,20 @@ and polish.
 > (widens the `provider` CHECK on `ai_configs` and `ai_usage_log` to
 > accept `'openrouter'`).
 
+- **AI voice replies (optional).** When a customer sends a WhatsApp voice
+  note, it can now be transcribed (Groq `whisper-large-v3-turbo` or OpenAI
+  `gpt-4o-mini-transcribe`) so the assistant reads it like text — and when
+  a speaker is configured (ElevenLabs `eleven_multilingual_v2` or OpenAI
+  TTS), the bot's reply is sent back as a WhatsApp voice note. Both
+  engines are optional per account and off by default: no transcription
+  key means voice notes behave as before; no speaker configured means
+  replies fall back to normal text. Transcripts are stored on the message
+  and shown in the inbox thread.
+
+> **Migration required:** apply `supabase/migrations/038_ai_voice.sql`
+> (adds `messages.transcript` and the optional `stt_*` / `tts_*` columns
+> on `ai_configs`).
+
 ## [0.8.1] — 2026-07-10
 
 Fixes inbound chats fragmenting into multiple threads for the same

@@ -27,6 +27,11 @@ const ROW = {
   auto_reply_enabled: false,
   auto_reply_max_per_conversation: 3,
   embeddings_api_key: null,
+  stt_provider: 'groq',
+  stt_api_key: 'enc-stt',
+  tts_provider: 'elevenlabs',
+  tts_api_key: 'enc-tts',
+  tts_voice: 'Rachel',
 }
 
 describe('loadAiConfig requireActive', () => {
@@ -41,6 +46,17 @@ describe('loadAiConfig requireActive', () => {
     expect(config).not.toBeNull()
     expect(config!.provider).toBe('openai')
     expect(config!.apiKey).toBe('plain:enc-key')
+  })
+
+  it('decrypts the optional voice keys and passes the providers through', async () => {
+    const config = await loadAiConfig(dbReturning(ROW), 'acct', {
+      requireActive: false,
+    })
+    expect(config!.sttProvider).toBe('groq')
+    expect(config!.sttApiKey).toBe('plain:enc-stt')
+    expect(config!.ttsProvider).toBe('elevenlabs')
+    expect(config!.ttsApiKey).toBe('plain:enc-tts')
+    expect(config!.ttsVoice).toBe('Rachel')
   })
 
   it('returns null when there is no row', async () => {

@@ -9,6 +9,8 @@ import { verifyMetaWebhookSignature } from '@/lib/whatsapp/webhook-signature'
 import { runAutomationsForTrigger } from '@/lib/automations/engine'
 import { dispatchInboundToFlows } from '@/lib/flows/engine'
 import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply'
+import { loadAiConfig } from '@/lib/ai/config'
+import { transcribeAudio } from '@/lib/ai/transcribe'
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver'
 import {
   handleTemplateWebhookChange,
@@ -715,6 +717,57 @@ async function processMessage(
   await flagBroadcastReplyIfAny(accountId, contactRecord.id)
 
   // ============================================================
+  // Optional voice-note transcription (STT).
+  //
+  // If this inbound is an audio message and the account has a
+  // transcription config (stt_provider + stt_api_key), download the
+  // audio, transcribe it (Groq Whisper / OpenAI), and store the result
+  // on `messages.transcript`. The transcript then serves two purposes:
+  //   - the AI auto-reply / draft can respond to the voice note's
+  //     content (and it's what makes the dispatch gate below fire);
+  //   - agents can read what the customer said under the bubble.
+  // Best-effort: a missing key, media-download failure, or transcription
+  // error must never fail the webhook (the 200 to Meta) — it just leaves
+  // the voice note untranscribed for a human, as before this feature.
+  // ============================================================
+  let voiceTranscript: string | null = null
+  if (contentType === 'audio' && message.audio?.id) {
+    try {
+      const aiCfg = await loadAiConfig(supabaseAdmin(), accountId, {
+        requireActive: false,
+      })
+      const sttProvider = aiCfg?.sttProvider
+      const sttKey = aiCfg?.sttApiKey
+      if (sttProvider && sttKey) {
+        const { url, mimeType } = await getMediaUrl({
+          mediaId: message.audio.id,
+          accessToken,
+        })
+        const { buffer } = await downloadMedia({
+          downloadUrl: url,
+          accessToken,
+        })
+        const { text } = await transcribeAudio({
+          provider: sttProvider,
+          apiKey: sttKey,
+          buffer,
+          mimeType,
+        })
+        voiceTranscript = text.trim()
+        if (voiceTranscript) {
+          await supabaseAdmin()
+            .from('messages')
+            .update({ transcript: voiceTranscript })
+            .eq('message_id', message.id)
+        }
+      }
+    } catch (sttErr) {
+      console.error('[webhook] audio transcription failed:', sttErr)
+      voiceTranscript = null
+    }
+  }
+
+  // ============================================================
   // Flow runner dispatch.
   //
   // If the runner consumes the message (it either advanced an active
@@ -811,17 +864,24 @@ async function processMessage(
     }).catch((err) => console.error('[automations] dispatch failed:', err))
   }
 
-  // AI auto-reply. Runs only for plain-text inbound the deterministic
-  // flow runner did NOT consume (flows win over the LLM), and only when
-  // the account has enabled it. Awaited inside `after()` (same reason as
-  // the webhook dispatch below); `dispatchInboundToAiReply` owns its
-  // eligibility gates + try/catch and never throws.
-  if (!flowConsumed && !interactiveReplyId && inboundText.trim()) {
+  // AI auto-reply. Runs for plain-text inbound the deterministic flow
+  // runner did NOT consume (flows win over the LLM), and also for a
+  // transcribed voice note (so the reply can address what the customer
+  // said out loud). Only when the account has enabled it. Awaited inside
+  // `after()` (same reason as the webhook dispatch below);
+  // `dispatchInboundToAiReply` owns its eligibility gates + try/catch
+  // and never throws.
+  const canAiDispatch =
+    !flowConsumed &&
+    !interactiveReplyId &&
+    (inboundText.trim() || (voiceTranscript !== null && voiceTranscript.trim() !== ''))
+  if (canAiDispatch) {
     await dispatchInboundToAiReply({
       accountId,
       conversationId: conversation.id,
       contactId: contactRecord.id,
       configOwnerUserId,
+      audioTriggered: inboundText.trim() ? false : !!voiceTranscript,
     })
   }
 

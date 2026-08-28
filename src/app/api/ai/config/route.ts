@@ -8,7 +8,7 @@ import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit
 import { encrypt, decrypt } from '@/lib/whatsapp/encryption'
 import { validateAiCredentials } from '@/lib/ai/validate'
 import { embedTexts } from '@/lib/ai/embeddings'
-import { AiError, type AiProvider } from '@/lib/ai/types'
+import { AiError, type AiProvider, type SttProvider, type TtsProvider } from '@/lib/ai/types'
 
 function bad(message: string) {
   return NextResponse.json({ error: message }, { status: 400 })
@@ -27,10 +27,10 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from('ai_configs')
-      // `api_key` is selected only to derive `has_key` — it is stripped
-      // out below and never returned to the client.
+      // The keys are selected only to derive the has_* flags — they are
+      // stripped out below and never returned to the client.
       .select(
-        'provider, model, system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, handoff_agent_id, api_key, embeddings_api_key',
+        'provider, model, system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, handoff_agent_id, api_key, embeddings_api_key, stt_provider, stt_api_key, tts_provider, tts_api_key, tts_voice',
       )
       .eq('account_id', accountId)
       .maybeSingle()
@@ -44,13 +44,21 @@ export async function GET() {
     }
 
     if (!data) return NextResponse.json({ configured: false })
-    // The keys are selected only to derive the has_* flags; neither is
+    // The keys are selected only to derive the has_* flags; none is
     // returned to the client.
-    const { api_key, embeddings_api_key, ...safe } = data
+    const {
+      api_key,
+      embeddings_api_key,
+      stt_api_key,
+      tts_api_key,
+      ...safe
+    } = data
     return NextResponse.json({
       configured: true,
       has_key: !!api_key,
       has_embeddings_key: !!embeddings_api_key,
+      has_stt_key: !!stt_api_key,
+      has_tts_key: !!tts_api_key,
       ...safe,
     })
   } catch (err) {
@@ -128,6 +136,32 @@ export async function POST(request: Request) {
         ? body.embeddings_api_key.trim()
         : ''
     const clearEmbeddingsKey = body.embeddings_api_key === null
+
+    // Voice capabilities (optional). stt_provider / tts_provider are a
+    // picker value (or null to disable); their keys follow the same
+    // "reuse stored on empty, clear on explicit null" convention as the
+    // embeddings key.
+    const sttProvider = (body.stt_provider ?? '') as SttProvider | ''
+    if (sttProvider !== '' && sttProvider !== 'groq' && sttProvider !== 'openai') {
+      return bad('stt_provider must be "groq" or "openai"')
+    }
+    const ttsProvider = (body.tts_provider ?? '') as TtsProvider | ''
+    if (
+      ttsProvider !== '' &&
+      ttsProvider !== 'elevenlabs' &&
+      ttsProvider !== 'openai'
+    ) {
+      return bad('tts_provider must be "elevenlabs" or "openai"')
+    }
+    const ttsVoice =
+      typeof body.tts_voice === 'string' ? body.tts_voice.trim() : null
+
+    const rawSttKey =
+      typeof body.stt_api_key === 'string' ? body.stt_api_key.trim() : ''
+    const clearSttKey = body.stt_api_key === null
+    const rawTtsKey =
+      typeof body.tts_api_key === 'string' ? body.tts_api_key.trim() : ''
+    const clearTtsKey = body.tts_api_key === null
 
     // Reuse the stored key when the form didn't send a fresh one.
     const { data: existing } = await supabase
@@ -217,6 +251,24 @@ export async function POST(request: Request) {
       shared.embeddings_api_key = encrypt(rawEmbeddingsKey)
     } else if (clearEmbeddingsKey) {
       shared.embeddings_api_key = null
+    }
+
+    // Voice config — only touch fields the form actually sent, so a
+    // partial save (e.g. editing the business context) doesn't reset the
+    // voice setup. Providers persist when present; the 038 keys follow
+    // the SAME reuse-on-empty / clear-on-null convention as embeddings.
+    if ('stt_provider' in body) shared.stt_provider = sttProvider || null
+    if ('tts_provider' in body) shared.tts_provider = ttsProvider || null
+    if ('tts_voice' in body) shared.tts_voice = ttsVoice || null
+    if (rawSttKey) {
+      shared.stt_api_key = encrypt(rawSttKey)
+    } else if (clearSttKey) {
+      shared.stt_api_key = null
+    }
+    if (rawTtsKey) {
+      shared.tts_api_key = encrypt(rawTtsKey)
+    } else if (clearTtsKey) {
+      shared.tts_api_key = null
     }
 
     if (existing) {

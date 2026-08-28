@@ -9,6 +9,19 @@
 export type AiProvider = 'openai' | 'anthropic' | 'openrouter'
 
 /**
+ * Optional speech-to-text providers for transcribing inbound voice notes.
+ * Groq (Whisper) and OpenAI share an OpenAI-compatible transcription
+ * endpoint; Anthropic / OpenRouter have no transcription API.
+ */
+export type SttProvider = 'groq' | 'openai'
+
+/**
+ * Optional text-to-speech providers for synthesizing the agent's reply
+ * into a WhatsApp voice note.
+ */
+export type TtsProvider = 'elevenlabs' | 'openai'
+
+/**
  * Account AI setup, decrypted and ready to use. Produced by
  * `loadAiConfig` — `apiKey` is the plaintext BYO provider key
  * (stored AES-256-GCM-encrypted at rest).
@@ -29,6 +42,19 @@ export interface AiConfig {
    *  knowledge base is embedded and semantic retrieval turns on; when
    *  null, retrieval falls back to lexical full-text search. */
   embeddingsApiKey: string | null
+  /** Optional voice transcription setup. When both are set, inbound
+   *  voice notes are transcribed (Groq or OpenAI) so the AI can reply to
+   *  their content. Null provider/key => no transcription (unchanged). */
+  sttProvider?: SttProvider | null
+  sttApiKey?: string | null
+  /** Optional voice synthesis setup. When set, the chat provider's text
+   *  reply is turned into an audio voice note (ElevenLabs or OpenAI).
+   *  Null provider/key => replies stay text-only (unchanged). */
+  ttsProvider?: TtsProvider | null
+  ttsApiKey?: string | null
+  /** Provider-specific voice/style id used for TTS (ElevenLabs voice_id
+   *  or an OpenAI voice name). Ignored when tts is off. */
+  ttsVoice?: string | null
 }
 
 /** A single conversation turn in the shape both providers accept. */

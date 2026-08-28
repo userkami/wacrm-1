@@ -50,4 +50,48 @@ describe('buildConversationContext', () => {
     )
     expect(out).toEqual([{ role: 'user', content: 'real' }])
   })
+
+  it('includes a transcribed voice note as [Voice: …]', async () => {
+    const out = await buildConversationContext(
+      fakeDb([
+        {
+          sender_type: 'customer',
+          content_type: 'audio',
+          content_text: null,
+          transcript: 'I need a refund please',
+        },
+      ]),
+      'conv-1',
+    )
+    expect(out).toEqual([
+      { role: 'user', content: '[Voice: I need a refund please]' },
+    ])
+  })
+
+  it('drops audio with no transcript (no STT) and non-text media', async () => {
+    const out = await buildConversationContext(
+      fakeDb([
+        {
+          sender_type: 'customer',
+          content_type: 'audio',
+          content_text: null,
+          transcript: null,
+        },
+        {
+          sender_type: 'customer',
+          content_type: 'image',
+          content_text: 'a caption',
+          transcript: null,
+        },
+        {
+          sender_type: 'agent',
+          content_type: 'text',
+          content_text: 'real text',
+          transcript: null,
+        },
+      ]),
+      'conv-1',
+    )
+    expect(out).toEqual([{ role: 'assistant', content: 'real text' }])
+  })
 })

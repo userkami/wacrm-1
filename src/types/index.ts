@@ -225,6 +225,12 @@ export interface Message {
   sender_id?: string;
   content_type: ContentType;
   content_text?: string;
+  /**
+   * Speech-to-text output for inbound voice notes (`content_type ===
+   * 'audio'`), produced by the AI voice pipeline (Groq/OpenAI Whisper).
+   * Lets agents read what was said without playing the clip.
+   */
+  transcript?: string;
   media_url?: string;
   template_name?: string;
   message_id?: string;

@@ -70,6 +70,19 @@ export function AiConfig() {
   const [embeddingsKey, setEmbeddingsKey] = useState('');
   const [embeddingsKeyEdited, setEmbeddingsKeyEdited] = useState(false);
   const [hasStoredEmbeddingsKey, setHasStoredEmbeddingsKey] = useState(false);
+  // Voice capabilities (optional). '' provider = off. Keys mirror the
+  // masked/clear behaviour of the chat + embeddings keys.
+  const [sttProvider, setSttProvider] = useState<'groq' | 'openai' | ''>('');
+  const [sttKey, setSttKey] = useState('');
+  const [sttKeyEdited, setSttKeyEdited] = useState(false);
+  const [hasStoredSttKey, setHasStoredSttKey] = useState(false);
+  const [ttsProvider, setTtsProvider] = useState<
+    'elevenlabs' | 'openai' | ''
+  >('');
+  const [ttsKey, setTtsKey] = useState('');
+  const [ttsKeyEdited, setTtsKeyEdited] = useState(false);
+  const [hasStoredTtsKey, setHasStoredTtsKey] = useState(false);
+  const [ttsVoice, setTtsVoice] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
   const [isActive, setIsActive] = useState(false);
   const [autoReplyEnabled, setAutoReplyEnabled] = useState(false);
@@ -143,11 +156,20 @@ export function AiConfig() {
   const embeddingsKeyPayload = () =>
     embeddingsKeyEdited ? embeddingsKey.trim() || null : undefined;
 
+  // Voice keys: same convention — undefined leaves stored value untouched.
+  const sttKeyPayload = () => (sttKeyEdited ? sttKey.trim() || null : undefined);
+  const ttsKeyPayload = () => (ttsKeyEdited ? ttsKey.trim() || null : undefined);
+
   const buildBody = () => ({
     provider,
     model: model.trim(),
     api_key: keyPayload(),
     embeddings_api_key: embeddingsKeyPayload(),
+    stt_provider: sttProvider || null,
+    stt_api_key: sttKeyPayload(),
+    tts_provider: ttsProvider || null,
+    tts_api_key: ttsKeyPayload(),
+    tts_voice: ttsVoice.trim() || null,
     system_prompt: systemPrompt.trim() || null,
     is_active: isActive,
     auto_reply_enabled: autoReplyEnabled,
@@ -381,6 +403,140 @@ export function AiConfig() {
                 {t('embeddingsHint', {
                   sameKeyText: provider === 'openai' ? t('sameKeyText') : '',
                 })}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t('voice')}</CardTitle>
+            <CardDescription>
+              {t('voiceDesc')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="ai-stt-provider">{t('sttProvider')}</Label>
+                <Select
+                  value={sttProvider || HANDOFF_QUEUE}
+                  onValueChange={(v) =>
+                    setSttProvider(
+                      !v || v === HANDOFF_QUEUE
+                        ? ''
+                        : (v as 'groq' | 'openai'),
+                    )
+                  }
+                  disabled={disabled}
+                >
+                  <SelectTrigger id="ai-stt-provider">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={HANDOFF_QUEUE}>
+                      {t('off')}
+                    </SelectItem>
+                    <SelectItem value="groq">Groq (Whisper)</SelectItem>
+                    <SelectItem value="openai">OpenAI</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {t('sttHint')}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ai-tts-provider">{t('ttsProvider')}</Label>
+                <Select
+                  value={ttsProvider || HANDOFF_QUEUE}
+                  onValueChange={(v) =>
+                    setTtsProvider(
+                      !v || v === HANDOFF_QUEUE
+                        ? ''
+                        : (v as 'elevenlabs' | 'openai'),
+                    )
+                  }
+                  disabled={disabled}
+                >
+                  <SelectTrigger id="ai-tts-provider">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={HANDOFF_QUEUE}>
+                      {t('off')}
+                    </SelectItem>
+                    <SelectItem value="elevenlabs">ElevenLabs</SelectItem>
+                    <SelectItem value="openai">OpenAI</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {t('ttsHint')}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ai-stt-key">{t('sttApiKey')}</Label>
+              <Input
+                id="ai-stt-key"
+                type="password"
+                value={sttKey}
+                onChange={(e) => {
+                  setSttKey(e.target.value);
+                  setSttKeyEdited(true);
+                }}
+                onFocus={() => {
+                  if (!sttKeyEdited && hasStoredSttKey) {
+                    setSttKey('');
+                    setSttKeyEdited(true);
+                  }
+                }}
+                placeholder={sttProvider === 'groq' ? 'gsk-...' : 'sk-...'}
+                disabled={disabled || !sttProvider}
+                autoComplete="off"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ai-tts-key">{t('ttsApiKey')}</Label>
+              <Input
+                id="ai-tts-key"
+                type="password"
+                value={ttsKey}
+                onChange={(e) => {
+                  setTtsKey(e.target.value);
+                  setTtsKeyEdited(true);
+                }}
+                onFocus={() => {
+                  if (!ttsKeyEdited && hasStoredTtsKey) {
+                    setTtsKey('');
+                    setTtsKeyEdited(true);
+                  }
+                }}
+                placeholder={
+                  ttsProvider === 'elevenlabs' ? 'sk_...' : 'sk-...'
+                }
+                disabled={disabled || !ttsProvider}
+                autoComplete="off"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ai-tts-voice">{t('ttsVoice')}</Label>
+              <Input
+                id="ai-tts-voice"
+                value={ttsVoice}
+                onChange={(e) => setTtsVoice(e.target.value)}
+                placeholder={
+                  ttsProvider === 'elevenlabs'
+                    ? 'Rachel (ElevenLabs voice id)'
+                    : 'alloy (OpenAI voice)'
+                }
+                disabled={disabled || !ttsProvider}
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">
+                {t('ttsVoiceHint')}
               </p>
             </div>
           </CardContent>

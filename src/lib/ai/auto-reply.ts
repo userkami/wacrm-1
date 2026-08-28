@@ -8,6 +8,7 @@ import { buildHandoffSummary } from './handoff'
 import { logAiUsage } from './usage'
 import { latestUserMessage } from './query'
 import { engineSendText } from '@/lib/flows/meta-send'
+import { sendAudioReply } from './audio-reply'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
 interface DispatchArgs {
@@ -18,6 +19,10 @@ interface DispatchArgs {
   /** The account's WhatsApp config owner, used for the outbound send's
    *  audit columns (mirrors how the flow runner passes it through). */
   configOwnerUserId: string
+  /** True when this inbound was a transcribed voice note. When set and the
+   *  account has a TTS key, the reply is synthesized into an audio voice
+   *  note; otherwise it falls back to a normal text reply. */
+  audioTriggered?: boolean
 }
 
 /**
@@ -42,7 +47,8 @@ interface DispatchArgs {
 export async function dispatchInboundToAiReply(
   args: DispatchArgs,
 ): Promise<void> {
-  const { accountId, conversationId, contactId, configOwnerUserId } = args
+  const { accountId, conversationId, contactId, configOwnerUserId, audioTriggered } =
+    args
 
   try {
     const db = supabaseAdmin()
@@ -179,14 +185,28 @@ export async function dispatchInboundToAiReply(
     }
     if (claimed !== true) return // lost the per-conversation cap race
 
-    await engineSendText({
-      accountId,
-      userId: configOwnerUserId,
-      conversationId,
-      contactId,
-      text,
-      aiGenerated: true,
-    })
+    const canSendAudio =
+      audioTriggered && config.ttsProvider && config.ttsApiKey && config.ttsVoice
+    if (canSendAudio) {
+      await sendAudioReply({
+        accountId,
+        conversationId,
+        contactId,
+        config,
+        text,
+      })
+    } else {
+      // Graceful fallback: replied to a voice note but no TTS configured
+      // (or a text inbound) → send the normal text reply.
+      await engineSendText({
+        accountId,
+        userId: configOwnerUserId,
+        conversationId,
+        contactId,
+        text,
+        aiGenerated: true,
+      })
+    }
   } catch (err) {
     console.error('[ai auto-reply] dispatch failed:', err)
   }
